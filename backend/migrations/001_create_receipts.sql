@@ -1,0 +1,23 @@
+CREATE TABLE continuity_receipts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  query_hash VARCHAR(64) NOT NULL,
+  query_text TEXT NOT NULL,
+  reliance_level VARCHAR(4) NOT NULL,
+  status VARCHAR(10) NOT NULL,
+  aggregate_confidence DECIMAL(3,2),
+  source_quality DECIMAL(3,2),
+  retrieval_coverage DECIMAL(3,2),
+  internal_consistency DECIMAL(3,2),
+  temporal_freshness DECIMAL(3,2),
+  domain_confidence DECIMAL(3,2),
+  contradictions_count INTEGER,
+  output_text TEXT,
+  failure_reason TEXT,
+  partial_available BOOLEAN DEFAULT FALSE,
+  partial_rc_level VARCHAR(4),
+  human_review_required BOOLEAN,
+  previous_receipt_id UUID REFERENCES continuity_receipts(id),
+  chain_hash VARCHAR(64),
+  ocms_payload JSONB NOT NULL
+);
