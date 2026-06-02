@@ -1,5 +1,7 @@
 import hashlib
+import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
@@ -16,11 +18,19 @@ from logic import (
     evaluate_thresholds,
 )
 
+load_dotenv()
+
+
+def get_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

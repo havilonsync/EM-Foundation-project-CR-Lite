@@ -50,8 +50,11 @@ The database table is created automatically on first backend startup via migrati
 
 ```bash
 cd ../frontend
+cp .env.example .env.local
 npm install
 ```
+
+Edit `frontend/.env.local` and set `NEXT_PUBLIC_API_URL` if your backend is not on `http://localhost:8000`.
 
 ## Running the app
 
@@ -122,11 +125,26 @@ cr-lite/
 
 ## Environment variables
 
-See `backend/.env.example`:
+### Backend (`backend/.env`)
 
-```env
-ANTHROPIC_API_KEY=
-DATABASE_URL=
-```
+Copy from `backend/.env.example`:
 
-Never commit `backend/.env` — it is listed in `.gitignore`.
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `DATABASE_URL` | PostgreSQL connection URL |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins (e.g. `http://localhost:3000,https://your-app.vercel.app`) |
+
+### Frontend (`frontend/.env.local`)
+
+Copy from `frontend/.env.example`:
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Backend base URL, no trailing slash (e.g. `http://localhost:8000` or your Railway URL) |
+
+On **Vercel**, set `NEXT_PUBLIC_API_URL` in Project → Settings → Environment Variables, then redeploy.
+
+On **Railway** (backend), set `CORS_ORIGINS` to include your Vercel URL (e.g. `https://cr-lite.vercel.app`).
+
+Never commit `backend/.env` or `frontend/.env.local` — they are listed in `.gitignore`.

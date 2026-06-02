@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { apiUrl } from "@/lib/api";
+
 const RC_LEVELS = ["RC-1", "RC-2", "RC-3", "RC-4", "RC-5"];
 
 export default function QueryPage() {
@@ -15,7 +17,7 @@ export default function QueryPage() {
     setResponse(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/query", {
+      const res = await fetch(apiUrl("/api/query"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, reliance_level: relianceLevel }),
