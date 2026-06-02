@@ -51,10 +51,6 @@ class QueryRequest(BaseModel):
 
 @app.on_event("startup")
 def startup():
-    raw_cors_origins = os.getenv("CORS_ORIGINS")
-    parsed_cors_origins = get_cors_origins()
-    print(f"CORS_DEBUG_RAW={raw_cors_origins!r}")
-    print(f"CORS_DEBUG_PARSED={parsed_cors_origins}")
     run_migrations()
 
 
