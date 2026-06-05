@@ -135,8 +135,7 @@ export default function QueryPage() {
             <>
               {answer && (
                 <div
-                  className="border p-4"
-                  style={{ borderColor: "var(--rule)" }}
+                  className="receipt-gold-border p-4"
                 >
                   <h3 className="mb-2 text-sm font-semibold">Answer</h3>
                   <AnswerText text={answer} />

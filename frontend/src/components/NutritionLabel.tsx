@@ -68,9 +68,8 @@ export default function NutritionLabel({
 
   return (
     <div
-      className="mx-auto w-full max-w-md rounded-none"
+      className="receipt-gold-border mx-auto w-full max-w-md rounded-none"
       style={{
-        border: "2px solid var(--gold)",
         backgroundColor: "var(--white)",
         fontFamily: "var(--font-ui)",
         color: "var(--stone)",

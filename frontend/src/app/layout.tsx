@@ -47,7 +47,7 @@ export default function RootLayout({
       lang="en"
       className={`${headingFont.variable} ${bodyFont.variable} ${uiFont.variable} ${monoFont.variable}`}
     >
-      <body className="antialiased">{children}</body>
+      <body className={`${bodyFont.className} antialiased`}>{children}</body>
     </html>
   );
 }

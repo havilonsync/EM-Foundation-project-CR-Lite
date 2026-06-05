@@ -102,10 +102,7 @@ export default function ReceiptDetailPage() {
           </div>
 
           {receipt.status === "PASS" && answer && (
-            <div
-              className="border p-4"
-              style={{ borderColor: "var(--rule)" }}
-            >
+            <div className="receipt-gold-border p-4">
               <h2 className="mb-2 text-sm font-semibold">Answer</h2>
               <AnswerText text={answer} />
             </div>
