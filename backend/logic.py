@@ -27,6 +27,12 @@ def calculate_aggregate(dimensions: dict) -> float:
     )
 
 
+# PASS/FAIL rules: a receipt PASSES only when both conditions hold for the
+# chosen reliance level (RC-1 … RC-5). (1) The weighted aggregate confidence
+# must meet or exceed the level's aggregate threshold. (2) Every individual
+# dimension must meet or exceed the level's minimum dimension floor. If either
+# the aggregate or any single dimension falls short, the receipt FAILS and the
+# failed dimensions are recorded with their shortfalls.
 def evaluate_thresholds(aggregate: float, dimensions: dict, reliance_level: str) -> dict:
     threshold = RELIANCE_THRESHOLDS[reliance_level]
     required_aggregate = threshold["aggregate"]
@@ -53,6 +59,10 @@ def evaluate_thresholds(aggregate: float, dimensions: dict, reliance_level: str)
     }
 
 
+# Chain hash: SHA-256 of the canonical JSON receipt payload (sorted keys) concatenated
+# with the previous receipt's chain hash. The first receipt uses an empty string as
+# the previous hash. Any change to receipt content or chain position produces a
+# different hash, linking each receipt to its predecessor.
 def calculate_chain_hash(receipt_data: dict, previous_hash: str) -> str:
     payload = json.dumps(receipt_data, sort_keys=True) + previous_hash
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -74,6 +84,33 @@ def build_failure_reason(evaluation: dict, reliance_level: str) -> str:
         )
 
     return " ".join(parts)
+
+
+def derive_required_action(reliance_level: str) -> str:
+    mapping = {
+        "RC-3": "human-expert-review",
+        "RC-4": "professional-review",
+        "RC-5": "safety-halt",
+    }
+    return mapping.get(reliance_level, "none")
+
+
+def get_failed_dimension_names(receipt: dict) -> list[str]:
+    dimensions = {dim: receipt[dim] for dim in DIMENSION_WEIGHTS}
+    evaluation = evaluate_thresholds(
+        receipt["aggregate_confidence"],
+        dimensions,
+        receipt["reliance_level"],
+    )
+    return [failure["dimension"] for failure in evaluation["failed_dimensions"]]
+
+
+def enrich_receipt_response(receipt: dict) -> dict:
+    return {
+        **receipt,
+        "failed_dimensions": get_failed_dimension_names(receipt),
+        "required_action": derive_required_action(receipt["reliance_level"]),
+    }
 
 
 def check_partial_availability(dimensions: dict, current_rc: str) -> dict:

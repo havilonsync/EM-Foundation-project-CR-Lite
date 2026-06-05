@@ -1,13 +1,27 @@
 import hashlib
 import os
 
+import psycopg2
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from claude_client import query_claude
-from db import get_recent_receipts, get_stats, get_latest_chain_hash, get_latest_receipt, run_migrations, save_receipt
+from db import (
+    check_db_connection,
+    get_latest_chain_hash,
+    get_latest_receipt,
+    get_receipt_by_id,
+    get_receipt_chain,
+    get_receipts_page,
+    get_stats,
+    run_migrations,
+    save_receipt,
+)
 from logic import (
     RELIANCE_THRESHOLDS,
     RC_LEVELS,
@@ -15,6 +29,7 @@ from logic import (
     calculate_aggregate,
     calculate_chain_hash,
     check_partial_availability,
+    enrich_receipt_response,
     evaluate_thresholds,
 )
 
@@ -22,8 +37,13 @@ load_dotenv()
 
 
 def get_cors_origins() -> list[str]:
-    raw = os.getenv("CORS_ORIGINS", "http://localhost:3000")
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    origins = []
+    for key in ("CORS_ORIGINS", "FRONTEND_URL"):
+        raw = os.getenv(key, "")
+        origins.extend(origin.strip() for origin in raw.split(",") if origin.strip())
+    if not origins:
+        origins.append("http://localhost:3000")
+    return list(dict.fromkeys(origins))
 
 
 app = FastAPI()
@@ -35,6 +55,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(exc.errors())},
+    )
+
+
+@app.exception_handler(psycopg2.Error)
+async def database_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database unavailable"},
+    )
 
 
 class QueryRequest(BaseModel):
@@ -54,9 +90,36 @@ def startup():
     run_migrations()
 
 
+@app.get("/health")
+def health():
+    try:
+        if not check_db_connection():
+            raise HTTPException(
+                status_code=503,
+                detail={"status": "error", "db": "disconnected"},
+            )
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "error",
+                "db": "disconnected",
+                "message": str(exc),
+            },
+        ) from exc
+
+    return {"status": "ok", "db": "connected"}
+
+
 @app.post("/api/query")
 def post_query(request: QueryRequest):
-    claude_response = query_claude(request.query)
+    try:
+        claude_response = query_claude(request.query)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Claude API unavailable: {exc}",
+        ) from exc
 
     dimensions = claude_response["confidence"]
     aggregate = calculate_aggregate(dimensions)
@@ -68,9 +131,15 @@ def post_query(request: QueryRequest):
     partial = check_partial_availability(dimensions, request.reliance_level)
     failure_reason = None if passed else build_failure_reason(evaluation, request.reliance_level)
 
-    latest_receipt = get_latest_receipt()
-    previous_receipt_id = latest_receipt["id"] if latest_receipt else None
-    previous_hash = get_latest_chain_hash()
+    try:
+        latest_receipt = get_latest_receipt()
+        previous_receipt_id = latest_receipt["id"] if latest_receipt else None
+        previous_hash = get_latest_chain_hash()
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable: {exc}",
+        ) from exc
 
     ocms_payload = {
         "answer": claude_response["answer"],
@@ -107,17 +176,62 @@ def post_query(request: QueryRequest):
 
     try:
         saved_receipt = save_receipt(receipt_data)
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable: {exc}",
+        ) from exc
 
-    return saved_receipt
+    return enrich_receipt_response(saved_receipt)
 
 
 @app.get("/api/receipts")
-def list_receipts():
-    return get_recent_receipts(limit=20)
+def list_receipts(page: int = 1, limit: int = 20):
+    try:
+        return get_receipts_page(page=page, limit=limit)
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable: {exc}",
+        ) from exc
+
+
+@app.get("/api/receipts/{receipt_id}/chain")
+def get_receipt_chain_endpoint(receipt_id: str):
+    try:
+        chain = get_receipt_chain(receipt_id)
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable: {exc}",
+        ) from exc
+
+    if chain is None:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return chain
+
+
+@app.get("/api/receipts/{receipt_id}")
+def get_receipt(receipt_id: str):
+    try:
+        receipt = get_receipt_by_id(receipt_id)
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable: {exc}",
+        ) from exc
+
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return enrich_receipt_response(receipt)
 
 
 @app.get("/api/stats")
 def stats():
-    return get_stats()
+    try:
+        return get_stats()
+    except (psycopg2.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database unavailable: {exc}",
+        ) from exc

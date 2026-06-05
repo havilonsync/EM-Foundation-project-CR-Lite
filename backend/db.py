@@ -97,6 +97,95 @@ def get_recent_receipts(limit: int = 20):
         conn.close()
 
 
+def check_db_connection() -> bool:
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return True
+    finally:
+        conn.close()
+
+
+def get_receipt_by_id(receipt_id: str):
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM continuity_receipts
+                WHERE id = %s
+                """,
+                (receipt_id,),
+            )
+            row = cur.fetchone()
+            if row:
+                return serialize_receipt(dict(row))
+            return None
+    finally:
+        conn.close()
+
+
+def get_receipt_chain(receipt_id: str, max_depth: int = 1000):
+    from logic import enrich_receipt_response
+
+    if not get_receipt_by_id(receipt_id):
+        return None
+
+    chain = []
+    visited = set()
+    current_id = receipt_id
+
+    while current_id and len(chain) < max_depth:
+        if current_id in visited:
+            break
+
+        receipt = get_receipt_by_id(current_id)
+        if not receipt:
+            break
+
+        visited.add(current_id)
+        chain.append(receipt)
+        current_id = receipt.get("previous_receipt_id")
+
+    chain.reverse()
+    return [enrich_receipt_response(receipt) for receipt in chain]
+
+
+def get_receipts_page(page: int = 1, limit: int = 20):
+    page = max(page, 1)
+    limit = max(min(limit, 100), 1)
+    offset = (page - 1) * limit
+
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM continuity_receipts")
+            total = dict(cur.fetchone())["total"] or 0
+
+            cur.execute(
+                """
+                SELECT *
+                FROM continuity_receipts
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (limit, offset),
+            )
+            items = [serialize_receipt(dict(row)) for row in cur.fetchall()]
+
+            return {
+                "items": items,
+                "total": total,
+                "page": page,
+                "limit": limit,
+            }
+    finally:
+        conn.close()
+
+
 def get_stats():
     conn = get_connection()
     try:
@@ -120,6 +209,31 @@ def get_stats():
             pass_count = row["pass_count"] or 0
             failure_count = row["failure_count"] or 0
 
+            cur.execute(
+                """
+                SELECT
+                    reliance_level AS level,
+                    COUNT(*) AS count,
+                    COUNT(*) FILTER (WHERE status = 'PASS') AS pass_count
+                FROM continuity_receipts
+                GROUP BY reliance_level
+                ORDER BY reliance_level
+                """
+            )
+            by_reliance_level = []
+            for rc_row in cur.fetchall():
+                rc_data = dict(rc_row)
+                rc_count = rc_data["count"] or 0
+                rc_pass_count = rc_data["pass_count"] or 0
+                by_reliance_level.append(
+                    {
+                        "level": rc_data["level"],
+                        "count": rc_count,
+                        "pass_count": rc_pass_count,
+                        "pass_rate": rc_pass_count / rc_count if rc_count else 0.0,
+                    }
+                )
+
             return {
                 "total": total,
                 "pass_count": pass_count,
@@ -133,6 +247,7 @@ def get_stats():
                     "temporal_freshness": float(row["avg_temporal_freshness"] or 0),
                     "domain_confidence": float(row["avg_domain_confidence"] or 0),
                 },
+                "by_reliance_level": by_reliance_level,
             }
     finally:
         conn.close()

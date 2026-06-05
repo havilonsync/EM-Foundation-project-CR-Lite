@@ -7,7 +7,10 @@ from logic import (
     calculate_aggregate,
     calculate_chain_hash,
     check_partial_availability,
+    derive_required_action,
+    enrich_receipt_response,
     evaluate_thresholds,
+    get_failed_dimension_names,
 )
 
 
@@ -115,6 +118,50 @@ class TestBuildFailureReason(unittest.TestCase):
         self.assertIn("required 0.90 for RC-5", reason)
         self.assertIn("source_quality scored 0.55", reason)
         self.assertIn("shortfall: 0.25", reason)
+
+
+class TestDeriveRequiredAction(unittest.TestCase):
+    def test_maps_reliance_levels(self):
+        self.assertEqual(derive_required_action("RC-1"), "none")
+        self.assertEqual(derive_required_action("RC-2"), "none")
+        self.assertEqual(derive_required_action("RC-3"), "human-expert-review")
+        self.assertEqual(derive_required_action("RC-4"), "professional-review")
+        self.assertEqual(derive_required_action("RC-5"), "safety-halt")
+
+
+class TestGetFailedDimensionNames(unittest.TestCase):
+    def test_returns_dimension_names_below_threshold(self):
+        receipt = {
+            "aggregate_confidence": 0.8,
+            "reliance_level": "RC-3",
+            "source_quality": 0.55,
+            "retrieval_coverage": 0.95,
+            "internal_consistency": 0.95,
+            "temporal_freshness": 0.95,
+            "domain_confidence": 0.95,
+        }
+
+        self.assertEqual(get_failed_dimension_names(receipt), ["source_quality"])
+
+
+class TestEnrichReceiptResponse(unittest.TestCase):
+    def test_adds_failed_dimensions_and_required_action(self):
+        receipt = {
+            "id": "receipt-1",
+            "reliance_level": "RC-4",
+            "aggregate_confidence": 0.8,
+            "source_quality": 0.55,
+            "retrieval_coverage": 0.95,
+            "internal_consistency": 0.95,
+            "temporal_freshness": 0.95,
+            "domain_confidence": 0.95,
+        }
+
+        enriched = enrich_receipt_response(receipt)
+
+        self.assertEqual(enriched["id"], "receipt-1")
+        self.assertEqual(enriched["failed_dimensions"], ["source_quality"])
+        self.assertEqual(enriched["required_action"], "professional-review")
 
 
 class TestCheckPartialAvailability(unittest.TestCase):

@@ -3,19 +3,54 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --navy:       #1A3A5C;
+  --accent:     #2E6DA4;
+  --gold:       #8B6914;
+  --stone:      #4A4A4A;
+  --mist:       #F7F5F2;
+  --white:      #FFFFFF;
+  --rule:       #D4CFC8;
+  --light-blue: #EBF2F9;
+  --green:      #1A5C2E;
+  --red:        #8B1A1A;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--stone);
+  background: var(--mist);
+  font-family: var(--font-body), Georgia, serif;
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading), Georgia, serif;
+  color: var(--navy);
+  font-weight: 600;
+}
+
+button,
+label,
+nav {
+  font-family: var(--font-ui), system-ui, sans-serif;
+}
+
+code,
+pre {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.provenance-diagram .react-flow__pane,
+.provenance-diagram .react-flow__viewport {
+  background-color: var(--mist);
 }
