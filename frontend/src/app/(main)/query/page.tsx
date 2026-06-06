@@ -16,6 +16,22 @@ import {
 } from "@/lib/receipt";
 import { RC_COLORS, RC_LEVELS, type RelianceLevel } from "@/lib/rc-levels";
 
+const RC_LABELS: Record<string, string> = {
+  "RC-1": "Brainstorm",
+  "RC-2": "Research",
+  "RC-3": "Professional",
+  "RC-4": "Legal / Regulatory",
+  "RC-5": "Medical / Safety",
+};
+
+const RC_DESCRIPTIONS: Record<string, string> = {
+  "RC-1": "RC-1 · Brainstorm · Casual reference only · Minimum confidence 0.30",
+  "RC-2": "RC-2 · Research assistance · Human review recommended for consequential decisions · Minimum confidence 0.50",
+  "RC-3": "RC-3 · Professional use · Human review required before action · Minimum confidence 0.65",
+  "RC-4": "RC-4 · Legal / Regulatory · Expert review mandatory · Minimum confidence 0.80",
+  "RC-5": "RC-5 · Medical / Safety · Do not rely without qualified expert verification · Minimum confidence 0.90",
+};
+
 export default function QueryPage() {
   const [query, setQuery] = useState("");
   const [relianceLevel, setRelianceLevel] = useState<RelianceLevel>("RC-3");
@@ -74,7 +90,7 @@ export default function QueryPage() {
               key={level}
               type="button"
               onClick={() => setRelianceLevel(level)}
-              className="rounded-none border px-4 py-2 text-sm font-semibold"
+              className="rounded-none border px-4 py-2 font-semibold flex flex-col items-center gap-1"
               style={{
                 borderColor: color,
                 backgroundColor: selected ? color : "transparent",
@@ -82,10 +98,25 @@ export default function QueryPage() {
                 fontFamily: "var(--font-ui)",
               }}
             >
-              {level}
+              <span style={{ fontSize: "14px" }}>{level}</span>
+              <span style={{ fontSize: "10px", fontWeight: 400, opacity: 0.9 }}>
+                {RC_LABELS[level]}
+              </span>
             </button>
           );
         })}
+      </div>
+
+      <div
+        className="text-sm p-3 border"
+        style={{
+          borderColor: RC_COLORS[relianceLevel],
+          color: "var(--stone)",
+          fontFamily: "var(--font-ui)",
+          backgroundColor: RC_COLORS[relianceLevel] + "18",
+        }}
+      >
+        {RC_DESCRIPTIONS[relianceLevel]}
       </div>
 
       <button
@@ -134,9 +165,7 @@ export default function QueryPage() {
           {receipt.status === "PASS" ? (
             <>
               {answer && (
-                <div
-                  className="receipt-gold-border p-4"
-                >
+                <div className="receipt-gold-border p-4">
                   <h3 className="mb-2 text-sm font-semibold">Answer</h3>
                   <AnswerText text={answer} />
                 </div>
