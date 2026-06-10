@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import AnswerText from "@/components/AnswerText";
 import FailureReceipt from "@/components/FailureReceipt";
+import { HelpButton } from "@/components/HelpSystem";
 import NutritionLabel from "@/components/NutritionLabel";
 import ProvenanceDiagram from "@/components/Provenancediagram";
 import { apiUrl } from "@/lib/api";
@@ -25,11 +26,20 @@ const RC_LABELS: Record<string, string> = {
 };
 
 const RC_DESCRIPTIONS: Record<string, string> = {
-  "RC-1": "RC-1 · Brainstorm · Casual reference only · Minimum confidence 0.30",
-  "RC-2": "RC-2 · Research assistance · Human review recommended for consequential decisions · Minimum confidence 0.50",
-  "RC-3": "RC-3 · Professional use · Human review required before action · Minimum confidence 0.65",
-  "RC-4": "RC-4 · Legal / Regulatory · Expert review mandatory · Minimum confidence 0.80",
-  "RC-5": "RC-5 · Medical / Safety · Do not rely without qualified expert verification · Minimum confidence 0.90",
+  "RC-1": "RC-1 · Brainstorm · Casual reference only · No minimum thresholds",
+  "RC-2": "RC-2 · Research assistance · Human review recommended for consequential decisions · Aggregate ≥ 0.50",
+  "RC-3": "RC-3 · Professional use · Human review required before action · Aggregate ≥ 0.70",
+  "RC-4": "RC-4 · Legal / Regulatory · Expert review mandatory · Aggregate ≥ 0.85",
+  "RC-5": "RC-5 · Medical / Safety · Do not rely without qualified expert verification · Aggregate ≥ 0.90",
+};
+
+// Maps RC levels to their HelpSystem topic keys
+const RC_HELP_TOPICS: Record<string, "rc-1" | "rc-2" | "rc-3" | "rc-4" | "rc-5"> = {
+  "RC-1": "rc-1",
+  "RC-2": "rc-2",
+  "RC-3": "rc-3",
+  "RC-4": "rc-4",
+  "RC-5": "rc-5",
 };
 
 export default function QueryPage() {
@@ -70,7 +80,12 @@ export default function QueryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-3xl font-semibold">Submit a Query</h1>
+
+      {/* Query input */}
+      <div className="flex items-center gap-2">
+        <h1 className="text-3xl font-semibold">Submit a Query</h1>
+        <HelpButton topic="query-input" />
+      </div>
 
       <textarea
         className="min-h-32 w-full rounded-none border p-3"
@@ -80,29 +95,55 @@ export default function QueryPage() {
         onChange={(e) => setQuery(e.target.value)}
       />
 
+      {/* RC level selector */}
+      <div className="flex items-center gap-2">
+        <span
+          style={{
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            color: "var(--navy)",
+            fontFamily: "var(--font-ui)",
+          }}
+        >
+          Select Reliance Category
+        </span>
+        <HelpButton topic="rc-selector" />
+      </div>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {RC_LEVELS.map((level) => {
           const color = RC_COLORS[level];
           const selected = relianceLevel === level;
 
           return (
-            <button
-              key={level}
-              type="button"
-              onClick={() => setRelianceLevel(level)}
-              className="rounded-none border px-4 py-2 font-semibold flex flex-col items-center gap-1"
-              style={{
-                borderColor: color,
-                backgroundColor: selected ? color : "transparent",
-                color: selected ? "var(--white)" : color,
-                fontFamily: "var(--font-ui)",
-              }}
-            >
-              <span style={{ fontSize: "14px" }}>{level}</span>
-              <span style={{ fontSize: "10px", fontWeight: 400, opacity: 0.9 }}>
-                {RC_LABELS[level]}
+            <div key={level} className="relative">
+              <button
+                type="button"
+                onClick={() => setRelianceLevel(level)}
+                className="w-full rounded-none border px-4 py-2 font-semibold flex flex-col items-center gap-1"
+                style={{
+                  borderColor: color,
+                  backgroundColor: selected ? color : "transparent",
+                  color: selected ? "var(--white)" : color,
+                  fontFamily: "var(--font-ui)",
+                }}
+              >
+                <span style={{ fontSize: "14px" }}>{level}</span>
+                <span style={{ fontSize: "10px", fontWeight: 400, opacity: 0.9 }}>
+                  {RC_LABELS[level]}
+                </span>
+              </button>
+              {/* Per-RC help button positioned top-right of each tile */}
+              <span
+                style={{
+                  position: "absolute",
+                  top: "4px",
+                  right: "4px",
+                }}
+              >
+                <HelpButton topic={RC_HELP_TOPICS[level]} />
               </span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -170,15 +211,51 @@ export default function QueryPage() {
                   <AnswerText text={answer} />
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--navy)", fontFamily: "var(--font-ui)" }}>
+                  Provenance Chain
+                </span>
+                <HelpButton topic="provenance-diagram" />
+              </div>
               <ProvenanceDiagram {...toProvenanceDiagramProps(receipt)} />
+
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--navy)", fontFamily: "var(--font-ui)" }}>
+                  Confidence Label
+                </span>
+                <HelpButton topic="nutrition-label" />
+              </div>
               <NutritionLabel {...toNutritionLabelProps(receipt)} />
             </>
           ) : (
             <>
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--navy)", fontFamily: "var(--font-ui)" }}>
+                  Provenance Chain
+                </span>
+                <HelpButton topic="provenance-diagram" />
+              </div>
               <ProvenanceDiagram {...toProvenanceDiagramProps(receipt)} />
+
               <div className="grid items-start gap-6 lg:grid-cols-2">
-                <NutritionLabel {...toNutritionLabelProps(receipt)} />
-                <FailureReceipt {...toFailureReceiptProps(receipt)} />
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--navy)", fontFamily: "var(--font-ui)" }}>
+                      Confidence Label
+                    </span>
+                    <HelpButton topic="nutrition-label" />
+                  </div>
+                  <NutritionLabel {...toNutritionLabelProps(receipt)} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--navy)", fontFamily: "var(--font-ui)" }}>
+                      Failure Receipt
+                    </span>
+                    <HelpButton topic="failure-receipt" />
+                  </div>
+                  <FailureReceipt {...toFailureReceiptProps(receipt)} />
+                </div>
               </div>
             </>
           )}
