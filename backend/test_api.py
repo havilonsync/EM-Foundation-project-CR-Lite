@@ -3,7 +3,11 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from main import app
+from main import app, validate_session_token
+
+
+def _auth_override():
+    return {"token_hash": "test-token-hash", "query_count": 0}
 
 
 def _sample_receipt(receipt_id: str = "receipt-3", previous_id: str | None = "receipt-2"):
@@ -118,23 +122,42 @@ class TestReceiptEndpoints(unittest.TestCase):
 
 
 class TestValidationAndErrors(unittest.TestCase):
+    def setUp(self):
+        app.dependency_overrides[validate_session_token] = _auth_override
+
+    def tearDown(self):
+        app.dependency_overrides.pop(validate_session_token, None)
+
     def test_invalid_reliance_level_returns_422_json(self):
         with TestClient(app) as client:
             response = client.post(
                 "/api/query",
                 json={"query": "test", "reliance_level": "RC-9"},
+                headers={"Authorization": "Bearer test"},
             )
 
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.headers["content-type"], "application/json")
         self.assertIn("detail", response.json())
 
+    @patch("main.increment_query_count")
+    @patch("main.save_receipt")
+    @patch("main.get_latest_chain_hash", return_value="")
+    @patch("main.get_latest_receipt", return_value=None)
     @patch("main.query_claude", side_effect=RuntimeError("API down"))
-    def test_claude_failure_returns_503_json(self, _mock_query):
+    def test_claude_failure_returns_503_json(
+        self,
+        _mock_query,
+        _mock_latest,
+        _mock_hash,
+        _mock_save,
+        _mock_increment,
+    ):
         with TestClient(app) as client:
             response = client.post(
                 "/api/query",
                 json={"query": "test", "reliance_level": "RC-1"},
+                headers={"Authorization": "Bearer test"},
             )
 
         self.assertEqual(response.status_code, 503)

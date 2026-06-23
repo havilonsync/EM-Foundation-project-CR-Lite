@@ -36,18 +36,183 @@ def serialize_receipt(row: dict) -> dict:
 
 
 def run_migrations():
-    migration_file = MIGRATIONS_DIR / "001_create_receipts.sql"
-    with open(migration_file) as f:
-        sql = f.read()
+    conn = get_connection()
+    try:
+        with open(MIGRATIONS_DIR / "001_create_receipts.sql") as f:
+            sql_001 = f.read()
+        with open(MIGRATIONS_DIR / "002_create_session_tokens.sql") as f:
+            sql_002 = f.read()
+        with open(MIGRATIONS_DIR / "003_add_checkout_session_to_tokens.sql") as f:
+            sql_003 = f.read()
 
+        with conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute(sql_001)
+                except psycopg2_errors.DuplicateTable:
+                    conn.rollback()
+
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM information_schema.tables
+                        WHERE table_schema = current_schema()
+                          AND table_name = 'session_tokens'
+                    )
+                    """
+                )
+                session_tokens_exists = cur.fetchone()[0]
+                if not session_tokens_exists:
+                    try:
+                        cur.execute(sql_002)
+                    except psycopg2_errors.DuplicateTable:
+                        conn.rollback()
+
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = 'session_tokens'
+                          AND column_name = 'stripe_checkout_session_id'
+                    )
+                    """
+                )
+                checkout_session_column_exists = cur.fetchone()[0]
+                if not checkout_session_column_exists:
+                    try:
+                        cur.execute(sql_003)
+                    except psycopg2_errors.DuplicateColumn:
+                        conn.rollback()
+    finally:
+        conn.close()
+
+
+def save_session_token(
+    token_hash: str,
+    expires_at: datetime,
+    payment_intent_id: str,
+    checkout_session_id: str | None = None,
+    jwt_token: str | None = None,
+) -> dict:
+    conn = get_connection()
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO session_tokens (
+                        token_hash,
+                        expires_at,
+                        stripe_payment_intent_id,
+                        stripe_checkout_session_id,
+                        jwt_token
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (
+                        token_hash,
+                        expires_at,
+                        payment_intent_id,
+                        checkout_session_id,
+                        jwt_token,
+                    ),
+                )
+                return serialize_receipt(dict(cur.fetchone()))
+    finally:
+        conn.close()
+
+
+def get_token_by_payment_intent(payment_intent_id: str) -> dict | None:
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT jwt_token, expires_at
+                FROM session_tokens
+                WHERE stripe_payment_intent_id = %s
+                  AND is_revoked = FALSE
+                  AND expires_at > NOW()
+                """,
+                (payment_intent_id,),
+            )
+            row = cur.fetchone()
+            if not row or not row["jwt_token"]:
+                return None
+            expires_at = row["expires_at"]
+            if isinstance(expires_at, datetime):
+                expires_at = expires_at.isoformat()
+            return {
+                "token": row["jwt_token"],
+                "expires_at": expires_at,
+            }
+    finally:
+        conn.close()
+
+
+def get_session_token(token_hash: str) -> dict | None:
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM session_tokens
+                WHERE token_hash = %s
+                """,
+                (token_hash,),
+            )
+            row = cur.fetchone()
+            if row:
+                return serialize_receipt(dict(row))
+            return None
+    finally:
+        conn.close()
+
+
+def increment_query_count(token_hash: str) -> int:
+    conn = get_connection()
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    UPDATE session_tokens
+                    SET query_count = query_count + 1
+                    WHERE token_hash = %s
+                    RETURNING query_count
+                    """,
+                    (token_hash,),
+                )
+                row = cur.fetchone()
+                if row:
+                    return int(row["query_count"])
+                return 0
+    finally:
+        conn.close()
+
+
+def revoke_token(token_hash: str) -> None:
     conn = get_connection()
     try:
         with conn:
             with conn.cursor() as cur:
-                try:
-                    cur.execute(sql)
-                except psycopg2_errors.DuplicateTable:
-                    pass
+                cur.execute(
+                    """
+                    UPDATE session_tokens
+                    SET is_revoked = TRUE
+                    WHERE token_hash = %s
+                    """,
+                    (token_hash,),
+                )
     finally:
         conn.close()
 
