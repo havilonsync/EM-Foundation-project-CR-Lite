@@ -101,8 +101,10 @@ You are ready to run the app.
 From `backend/` with your virtual environment activated:
 
 ```bash
-uvicorn main:app --reload
+python -m uvicorn main:app --reload
 ```
+
+Use `python -m uvicorn` (not bare `uvicorn`) so the reloader uses this virtual environment. A globally installed `uvicorn` from Homebrew can start without `stripe` and other packages from `requirements.txt`.
 
 The API starts at [http://localhost:8000](http://localhost:8000).
 
